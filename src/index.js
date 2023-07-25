@@ -1,84 +1,95 @@
-const form = document.getElementById('search-form');
-const gallery = document.querySelector('.gallery');
-const loadMoreBtn = document.querySelector('.load-more');
+import Notiflix from 'notiflix';
+import SimpleLightbox from 'simplelightbox';
+import 'simplelightbox/dist/simple-lightbox.min.css';
 
-const API_KEY = '38355159-bacd356c93a5482dc866a24cc';
-const PER_PAGE = 40;
+import refs from './js/refs';
+import ImageService from './js/ImageService';
+import LoadMoreBtn from './js/LoadMoreBtn';
+import markupImages from './js/markup';
 
-let currentPage = 1;
-let currentQuery = '';
+const { form, galleryEl } = refs;
 
-// Function to fetch images from Pixabay API
-async function fetchImages(query, page) {
-  const url = `https://pixabay.com/api/?key=${API_KEY}&q=${query}&image_type=photo&orientation=horizontal&safesearch=true&page=${page}&per_page=${PER_PAGE}`;
+const newImageSearch = new ImageService();
+const loadMoreBtn = new LoadMoreBtn({
+  selector: '.load-more',
+  isHidden: true,
+});
 
-  try {
-    const response = await fetch(url);
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error fetching images:', error);
-    return [];
+form.addEventListener('submit', onSubmit);
+loadMoreBtn.button.addEventListener('click', fetchImages);
+
+async function onSubmit(evt) {
+	evt.preventDefault();
+	const form = evt.currentTarget;
+  const value = form.elements.searchQuery.value.trim();
+  if (value === '') onError('The search query is not!');
+  newImageSearch.searchQuery = value;
+	clearImagesList();
+	newImageSearch.resetPage();
+	newImageSearch.resetTotalHits();
+
+	loadMoreBtn.show();
+	
+	const totalHits = await fetchImages();
+	Notiflix.Notify.info(`📌 Hooray! We found ${totalHits} images.`);
+	form.reset();	
+}
+
+async function fetchImages() {
+  loadMoreBtn.disable();
+	try {
+    const { hits, totalHits } = await fetchImagesMarkup();
+
+    markupImages(hits);
+
+    // Create the gallary
+    const gallery = new SimpleLightbox('.photo-card a', {
+      captionsData: 'alt',
+      captionPosition: 'bottom',
+      captionDelay: 250,
+    });
+
+    gallery.on('closed.simplelightbox', () => {
+      gallery.refresh();
+    });
+
+    if (totalHits > newImageSearch.perPage) {
+      loadMoreBtn.enable();
+      newImageSearch.incrTotalHits();
+    }
+    if (totalHits <= newImageSearch.totalHits) {
+      loadMoreBtn.hide();
+      Notiflix.Notify.info(
+        "📌 We're sorry, but you've reached the end of search results."
+			);
+			throw new Error(
+        "We're sorry, but you've reached the end of search results."
+      );
+    }
+  } catch (err) {
+    onError(err);
   }
 }
 
-// Function to render image cards in the gallery
-function renderImageCards(images) {
-  images.forEach(image => {
-    const card = document.createElement('div');
-    card.classList.add('photo-card');
-    card.innerHTML = `
-      <img src="${image.webformatURL}" alt="${image.tags}" loading="lazy" />
-      <div class="info">
-        <p class="info-item"><b>Likes:</b> ${image.likes}</p>
-        <p class="info-item"><b>Views:</b> ${image.views}</p>
-        <p class="info-item"><b>Comments:</b> ${image.comments}</p>
-        <p class="info-item"><b>Downloads:</b> ${image.downloads}</p>
-      </div>
-    `;
-    gallery.appendChild(card);
-  });
+async function fetchImagesMarkup() {	
+	try {
+    const { hits, totalHits } = await newImageSearch.getImages();
+    if (hits.length === 0) {
+      throw new Error(
+        'Sorry, there are no images matching your search query. Please try again.'
+      );
+    }
+		return { hits, totalHits };		
+  } catch (err) {
+    onError(err);
+	}
 }
 
-// Function to handle form submission
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  gallery.innerHTML = ''; // Clear existing gallery
-  currentQuery = form.searchQuery.value.trim();
-  currentPage = 1;
-  loadMoreBtn.style.display = 'none';
+function clearImagesList() {
+	galleryEl.innerHTML = '';
+}
 
-  const images = await fetchImages(currentQuery, currentPage);
-  if (images.length > 0) {
-    renderImageCards(images);
-    if (images.length === PER_PAGE) {
-      loadMoreBtn.style.display = 'block';
-    }
-  } else {
-    showNoImagesMessage();
-  }
-});
-
-// Function to handle "Load more" button click
-loadMoreBtn.addEventListener('click', async () => {
-  currentPage++;
-  const images = await fetchImages(currentQuery, currentPage);
-  if (images.length > 0) {
-    renderImageCards(images);
-    if (images.length < PER_PAGE) {
-      loadMoreBtn.style.display = 'none';
-    }
-  } else {
-    loadMoreBtn.style.display = 'none';
-  }
-});
-
-// Function to show a message when no images are found
-function showNoImagesMessage() {
-  const noImagesMessage = `
-    <div class="photo-card">
-      <p>Sorry, there are no images matching your search query. Please try again.</p>
-    </div>
-  `;
-  gallery.innerHTML = noImagesMessage;
+function onError(err) {
+	loadMoreBtn.hide();
+	Notiflix.Notify.failure(`❌ ${err}`);
 }
