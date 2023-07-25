@@ -1,6 +1,6 @@
 .search-form {
 	background-color: cornflowerblue;
-	padding: 16px 0;
+	padding: 30px 0;
   display: flex;
   justify-content: center;
 	gap: 20px;
@@ -34,7 +34,7 @@
   .photo-card {display: flex;
     flex-direction: column;
     justify-content: space-between;
-    width: 18%;
+    width: 15%;
     background-color: white;
     border-radius: 10px;
     padding: 10px;
